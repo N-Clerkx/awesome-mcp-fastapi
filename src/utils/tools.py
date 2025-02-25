@@ -1,11 +1,13 @@
-from fastapi import FastAPI, APIRouter, Body, Query, Path, Header, Cookie
-from fastapi.routing import APIRoute
-from pydantic import BaseModel
 import inspect
-from typing import Dict, List, Any, Optional, Union, get_origin, get_args
-from loguru import logger
 import json
 from datetime import datetime
+from typing import Any, Dict, List, Optional, Union, get_args, get_origin
+
+from fastapi import APIRouter, Body, Cookie, FastAPI, Header, Path, Query
+from fastapi.routing import APIRoute
+from loguru import logger
+from pydantic import BaseModel
+
 
 class ToolSchema(BaseModel):
     """Schema for tool metadata"""
@@ -151,7 +153,7 @@ class ToolRegistry:
 
             # Get signature
             sig = inspect.signature(current_func)
-            
+
             # Get docstring for additional context
             docstring = inspect.getdoc(current_func)
             if docstring and "description" not in schema:
@@ -177,25 +179,36 @@ class ToolRegistry:
                         if hasattr(param.annotation, "model_json_schema"):
                             # Full Pydantic model parameter
                             model_schema = param.annotation.model_json_schema()
-                            
+
                             # Process schema to be more expressive
                             self._enhance_schema_properties(model_schema)
-                            
+
                             # Add model description if available
-                            if hasattr(param.annotation, "__doc__") and param.annotation.__doc__:
+                            if (
+                                hasattr(param.annotation, "__doc__")
+                                and param.annotation.__doc__
+                            ):
                                 doc = param.annotation.__doc__.strip()
                                 if doc:
                                     model_schema["description"] = doc
 
                             # Try to get examples from model fields
                             if hasattr(param.annotation, "model_fields"):
-                                for field_name, field in param.annotation.model_fields.items():
+                                for (
+                                    field_name,
+                                    field,
+                                ) in param.annotation.model_fields.items():
                                     # Extract example for this field
                                     field_example = None
-                                    if hasattr(field, "json_schema_extra") and field.json_schema_extra:
+                                    if (
+                                        hasattr(field, "json_schema_extra")
+                                        and field.json_schema_extra
+                                    ):
                                         if "example" in field.json_schema_extra:
-                                            field_example = field.json_schema_extra["example"]
-                                    
+                                            field_example = field.json_schema_extra[
+                                                "example"
+                                            ]
+
                                     # Add to overall example
                                     if field_example is not None:
                                         example_input[field_name] = field_example
@@ -212,7 +225,7 @@ class ToolRegistry:
                     return {
                         "type": "object",
                         "additionalProperties": True,
-                        "description": f"Request body for {func.__name__}"
+                        "description": f"Request body for {func.__name__}",
                     }, example_input
 
             # If we got here, look for pydantic models in parameters
@@ -224,25 +237,36 @@ class ToolRegistry:
                     if hasattr(param.annotation, "model_json_schema"):
                         # Full Pydantic model parameter
                         model_schema = param.annotation.model_json_schema()
-                        
+
                         # Process schema to be more expressive
                         self._enhance_schema_properties(model_schema)
-                        
+
                         # Add model description if available
-                        if hasattr(param.annotation, "__doc__") and param.annotation.__doc__:
+                        if (
+                            hasattr(param.annotation, "__doc__")
+                            and param.annotation.__doc__
+                        ):
                             doc = param.annotation.__doc__.strip()
                             if doc:
                                 model_schema["description"] = doc
 
                         # Try to get examples from model fields
                         if hasattr(param.annotation, "model_fields"):
-                            for field_name, field in param.annotation.model_fields.items():
+                            for (
+                                field_name,
+                                field,
+                            ) in param.annotation.model_fields.items():
                                 # Extract example for this field
                                 field_example = None
-                                if hasattr(field, "json_schema_extra") and field.json_schema_extra:
+                                if (
+                                    hasattr(field, "json_schema_extra")
+                                    and field.json_schema_extra
+                                ):
                                     if "example" in field.json_schema_extra:
-                                        field_example = field.json_schema_extra["example"]
-                                
+                                        field_example = field.json_schema_extra[
+                                            "example"
+                                        ]
+
                                 # Add to overall example
                                 if field_example is not None:
                                     example_input[field_name] = field_example
@@ -251,9 +275,9 @@ class ToolRegistry:
 
             # If no body found, return generic object schema with improved description
             return {
-                "type": "object", 
+                "type": "object",
                 "description": f"Request body for {func.__name__}",
-                "additionalProperties": True
+                "additionalProperties": True,
             }, example_input
 
         except Exception as e:
@@ -263,7 +287,7 @@ class ToolRegistry:
     def _enhance_schema_properties(self, schema: Dict[str, Any]) -> None:
         """
         Enhance a schema by making properties more expressive
-        
+
         Args:
             schema: The JSON schema to enhance (modified in-place)
         """
@@ -272,27 +296,31 @@ class ToolRegistry:
             for prop_name, prop_schema in schema["properties"].items():
                 # Recursively enhance nested properties
                 self._enhance_schema_properties(prop_schema)
-                
+
                 # Ensure each property has a description
                 if "description" not in prop_schema and "title" in prop_schema:
                     prop_schema["description"] = f"{prop_schema['title']} value"
-        
+
         # Process arrays
         if schema.get("type") == "array" and "items" in schema:
             self._enhance_schema_properties(schema["items"])
-            
+
             # Add description for arrays if missing
             if "description" not in schema:
                 items_desc = schema["items"].get("description", "items")
                 schema["description"] = f"Array of {items_desc}"
-        
+
         # Add description to enums if missing
         if "enum" in schema and "description" not in schema:
             enum_values = ", ".join([str(v) for v in schema["enum"]])
             schema["description"] = f"One of: {enum_values}"
-        
+
         # Add description to objects if missing
-        if schema.get("type") == "object" and "description" not in schema and "title" in schema:
+        if (
+            schema.get("type") == "object"
+            and "description" not in schema
+            and "title" in schema
+        ):
             schema["description"] = f"{schema['title']} object"
 
     def _extract_param_schema(
@@ -328,35 +356,47 @@ class ToolRegistry:
                     continue
 
                 # Check if parameter is a Pydantic model
-                if param.annotation != inspect.Parameter.empty and hasattr(param.annotation, "model_json_schema"):
+                if param.annotation != inspect.Parameter.empty and hasattr(
+                    param.annotation, "model_json_schema"
+                ):
                     # This is a Pydantic model for query parameters
                     model_schema = param.annotation.model_json_schema()
-                    
+
                     # Process schema for better descriptions
                     self._enhance_schema_properties(model_schema)
-                    
+
                     # Add model description
-                    if hasattr(param.annotation, "__doc__") and param.annotation.__doc__:
+                    if (
+                        hasattr(param.annotation, "__doc__")
+                        and param.annotation.__doc__
+                    ):
                         doc = param.annotation.__doc__.strip()
                         if doc:
                             model_schema["description"] = doc
-                    
+
                     # Get examples from model
                     model_example = {}
                     if hasattr(param.annotation, "model_fields"):
                         for field_name, field in param.annotation.model_fields.items():
-                            if hasattr(field, "json_schema_extra") and field.json_schema_extra:
+                            if (
+                                hasattr(field, "json_schema_extra")
+                                and field.json_schema_extra
+                            ):
                                 if "example" in field.json_schema_extra:
-                                    model_example[field_name] = field.json_schema_extra["example"]
-                    
+                                    model_example[field_name] = field.json_schema_extra[
+                                        "example"
+                                    ]
+
                     # Add "in" property for all fields
                     if "properties" in model_schema:
-                        for prop_name, prop_schema in model_schema["properties"].items():
+                        for prop_name, prop_schema in model_schema[
+                            "properties"
+                        ].items():
                             prop_schema["in"] = "query"
-                    
+
                     # Add model directly to properties instead of wrapping
                     return model_schema, model_example
-            
+
             # If no Pydantic model is found, process individual parameters
             for param_name, param in sig.parameters.items():
                 # Skip special params
@@ -393,12 +433,15 @@ class ToolRegistry:
                 if param.default != param.empty:
                     if hasattr(param.default, "description"):
                         param_schema["description"] = param.default.description
-                    
+
                     if hasattr(param.default, "example"):
                         example_value = param.default.example
-                        
+
                     # Get default value
-                    if hasattr(param.default, "default") and param.default.default != ...:
+                    if (
+                        hasattr(param.default, "default")
+                        and param.default.default != ...
+                    ):
                         param_schema["default"] = param.default.default
 
                 # Add to schema with parameter location
@@ -409,7 +452,9 @@ class ToolRegistry:
                     example_input[param_name] = example_value
 
                 # Mark as required if no default value
-                if param.default == param.empty or (hasattr(param.default, "default") and param.default.default == ...):
+                if param.default == param.empty or (
+                    hasattr(param.default, "default") and param.default.default == ...
+                ):
                     schema["required"].append(param_name)
 
             return schema, example_input
@@ -417,6 +462,7 @@ class ToolRegistry:
         except Exception as e:
             logger.error(f"Error extracting parameter schema: {e}")
             import traceback
+
             logger.error(traceback.format_exc())
             return {"type": "object", "description": "Request parameters"}, None
 
@@ -429,16 +475,18 @@ class ToolRegistry:
                 current_func = current_func.__wrapped__
 
             sig = inspect.signature(current_func)
-            
+
             # Extract return type annotation
             return_type = sig.return_annotation
-            
+
             # First priority: Look for response_model in route decorator
             response_model = self._extract_response_model(current_func, func)
-            
+
             # Determine which model to use for schema generation
             if response_model is not None:
-                logger.debug(f"Using response_model from route decorator: {response_model}")
+                logger.debug(
+                    f"Using response_model from route decorator: {response_model}"
+                )
                 model_type = response_model
             elif return_type != inspect.Signature.empty:
                 logger.debug(f"Using return type annotation: {return_type}")
@@ -450,17 +498,19 @@ class ToolRegistry:
                     description = doc.split("\n")[0]
                 else:
                     description = "Response object"
-                    
-                logger.debug(f"No return type information available, using generic schema")
+
+                logger.debug(
+                    "No return type information available, using generic schema"
+                )
                 return {"type": "object", "description": description}, None
 
             # Handle Pydantic models
             if hasattr(model_type, "model_json_schema"):
                 schema = model_type.model_json_schema()
-                
+
                 # Process schema to ensure all properties have descriptions
                 self._enhance_schema_properties(schema)
-                
+
                 # Add description if available
                 if "description" not in schema:
                     if hasattr(model_type, "__doc__") and model_type.__doc__:
@@ -469,15 +519,15 @@ class ToolRegistry:
                             schema["description"] = doc
                     elif "title" in schema:
                         schema["description"] = f"{schema['title']} response"
-                
+
                 # Create example output
                 example_output = self._create_example_from_model(model_type)
-                    
+
                 return schema, example_output
-            
+
             # Handle other return types
             schema, example = self._type_to_schema(model_type)
-            
+
             # Add description from docstring if available
             if "description" not in schema:
                 doc = inspect.getdoc(current_func)
@@ -485,12 +535,13 @@ class ToolRegistry:
                     first_line = doc.split("\n")[0].strip()
                     if first_line:
                         schema["description"] = first_line
-                        
+
             return schema, example
-        
+
         except Exception as e:
             logger.error(f"Error extracting output schema: {e}")
             import traceback
+
             logger.error(traceback.format_exc())
             return {"type": "object", "description": "Response data"}, None
 
@@ -499,26 +550,29 @@ class ToolRegistry:
         # Strategy 1: Look directly for response_model attribute
         if hasattr(original_func, "response_model"):
             return original_func.response_model
-            
+
         # Strategy 2: Check if function is a FastAPI route with response_model
         if hasattr(original_func, "__closure__") and original_func.__closure__:
             for cell in original_func.__closure__:
                 if not hasattr(cell, "cell_contents"):
                     continue
-                    
+
                 # Look for response_model in dictionary
-                if isinstance(cell.cell_contents, dict) and "response_model" in cell.cell_contents:
+                if (
+                    isinstance(cell.cell_contents, dict)
+                    and "response_model" in cell.cell_contents
+                ):
                     return cell.cell_contents["response_model"]
-                    
+
                 # Look for response_model in APIRouter
                 if hasattr(cell.cell_contents, "response_model"):
                     return cell.cell_contents.response_model
-        
+
         # Strategy 3: Check route handler's endpoint
         if hasattr(original_func, "endpoint"):
             if hasattr(original_func.endpoint, "response_model"):
                 return original_func.endpoint.response_model
-        
+
         # Strategy 4: Check for router in decorated function
         if hasattr(current_func, "router") and hasattr(current_func.router, "routes"):
             # Try to find matching route
@@ -526,26 +580,26 @@ class ToolRegistry:
                 if route.endpoint == current_func:
                     if hasattr(route, "response_model"):
                         return route.response_model
-        
+
         # Strategy 5: Try to find from app routes
         if self.app and hasattr(self.app, "routes"):
             for route in self.app.routes:
                 if hasattr(route, "endpoint") and route.endpoint == original_func:
                     if hasattr(route, "response_model"):
                         return route.response_model
-        
+
         # Not found
         return None
 
     def _create_example_from_model(self, model_type) -> Optional[Dict[str, Any]]:
         """Create an example instance from a Pydantic model"""
         # Try multiple strategies to create an example
-        
+
         # Strategy 1: Use Config.schema_extra.example if available
         if hasattr(model_type, "Config") and hasattr(model_type.Config, "schema_extra"):
             if "example" in model_type.Config.schema_extra:
                 return model_type.Config.schema_extra["example"]
-        
+
         # Strategy 2: Build example from field examples
         if hasattr(model_type, "model_fields"):
             field_examples = {}
@@ -555,12 +609,14 @@ class ToolRegistry:
                     if "example" in field.json_schema_extra:
                         field_examples[field_name] = field.json_schema_extra["example"]
                         continue
-                
+
                 # If no example provided, generate a placeholder based on field type
                 if hasattr(field, "annotation"):
-                    field_examples[field_name] = self._generate_field_example(field.annotation)
-            
-            # Only try to construct if we have field examples            
+                    field_examples[field_name] = self._generate_field_example(
+                        field.annotation
+                    )
+
+            # Only try to construct if we have field examples
             if field_examples:
                 try:
                     # Try to construct model with examples
@@ -568,7 +624,7 @@ class ToolRegistry:
                     return example_obj.model_dump()
                 except Exception as e:
                     logger.debug(f"Could not create example from field examples: {e}")
-        
+
         # Strategy 3: Extract example from docstring
         doc = inspect.getdoc(model_type)
         if doc and "Example:" in doc:
@@ -582,21 +638,21 @@ class ToolRegistry:
                     break
                 if capture and line.strip():
                     example_lines.append(line)
-            
+
             if example_lines:
                 example_str = "\n".join(example_lines)
                 try:
                     return json.loads(example_str)
                 except json.JSONDecodeError:
                     pass
-        
+
         # Strategy 4: Try to create an instance with default values
         try:
             default_instance = model_type()
             return default_instance.model_dump()
         except Exception:
             pass
-            
+
         # Cannot create example
         return None
 
@@ -617,7 +673,7 @@ class ToolRegistry:
             return {}
         elif annotation is datetime:
             return datetime.now().isoformat()
-        
+
         # Handle Optional types
         origin = get_origin(annotation)
         if origin is Union:
@@ -627,7 +683,7 @@ class ToolRegistry:
                 non_none_args = [arg for arg in args if arg is not type(None)]
                 if non_none_args:
                     return self._generate_field_example(non_none_args[0])
-        
+
         # Handle lists
         if origin is list:
             args = get_args(annotation)
@@ -635,28 +691,30 @@ class ToolRegistry:
                 # Create a list with one example item
                 item_example = self._generate_field_example(args[0])
                 return [item_example]
-        
+
         # Handle enums
         if hasattr(annotation, "__members__") and hasattr(annotation, "__enum__"):
             # Return first enum value
             if annotation.__members__:
                 first_key = next(iter(annotation.__members__))
                 return first_key
-                
+
         # For Pydantic models, recursively build example
         if hasattr(annotation, "model_fields"):
             try:
                 field_examples = {}
                 for field_name, field in annotation.model_fields.items():
                     if hasattr(field, "annotation"):
-                        field_examples[field_name] = self._generate_field_example(field.annotation)
-                
+                        field_examples[field_name] = self._generate_field_example(
+                            field.annotation
+                        )
+
                 example_obj = annotation.model_construct(**field_examples)
                 return example_obj.model_dump()
             except Exception:
                 # Return empty dict if we can't create model instance
                 return {}
-        
+
         # Default fallback
         return None
 
@@ -669,7 +727,10 @@ class ToolRegistry:
             float: ({"type": "number", "description": "Floating-point number"}, 0.0),
             bool: ({"type": "boolean", "description": "Boolean value"}, False),
             list: ({"type": "array", "items": {}, "description": "List of items"}, []),
-            dict: ({"type": "object", "description": "Dictionary of key-value pairs"}, {}),
+            dict: (
+                {"type": "object", "description": "Dictionary of key-value pairs"},
+                {},
+            ),
             None: ({"type": "null", "description": "No value"}, None),
         }
 
@@ -691,20 +752,22 @@ class ToolRegistry:
         # Handle Enum types specially
         if hasattr(type_hint, "__members__") and hasattr(type_hint, "__enum__"):
             enum_values = list(type_hint.__members__.keys())
-            description = type_description or f"Enumeration with values: {', '.join(enum_values)}"
+            description = (
+                type_description or f"Enumeration with values: {', '.join(enum_values)}"
+            )
             return {
-                "type": "string", 
+                "type": "string",
                 "enum": enum_values,
-                "description": description
+                "description": description,
             }, enum_values[0] if enum_values else None
 
         # Handle Pydantic models
         if hasattr(type_hint, "model_json_schema"):
             schema = type_hint.model_json_schema()
-            
+
             # Enhance the schema
             self._enhance_schema_properties(schema)
-            
+
             # Add model description if available
             if type_description:
                 schema["description"] = type_description
@@ -717,7 +780,7 @@ class ToolRegistry:
                     example_output = example_obj.model_dump()
             except Exception as e:
                 logger.debug(f"Could not create example output: {e}")
-                
+
             return schema, example_output
 
         # Handle generics and advanced types
@@ -735,7 +798,9 @@ class ToolRegistry:
                         if "type" in base_schema:
                             if isinstance(base_schema["type"], str):
                                 base_schema["type"] = [base_schema["type"], "null"]
-                                base_schema["description"] = f"Optional {base_schema.get('description', 'value')}"
+                                base_schema["description"] = (
+                                    f"Optional {base_schema.get('description', 'value')}"
+                                )
                         return base_schema, example
 
                 # Handle other Union types
@@ -745,8 +810,8 @@ class ToolRegistry:
                     schemas.append(schema)
 
                 return {
-                    "oneOf": schemas, 
-                    "description": "One of multiple possible types"
+                    "oneOf": schemas,
+                    "description": "One of multiple possible types",
                 }, None
 
             # Handle List[T]
@@ -754,44 +819,45 @@ class ToolRegistry:
                 if args:
                     item_schema, item_example = self._type_to_schema(args[0])
                     schema = {
-                        "type": "array", 
+                        "type": "array",
                         "items": item_schema,
-                        "description": f"List of {item_schema.get('description', 'items')}"
+                        "description": f"List of {item_schema.get('description', 'items')}",
                     }
                     return schema, [item_example] if item_example is not None else []
-                
+
             # Handle Dict[K, V] - Add handling for dictionary types with type arguments
             if origin is dict or str(origin).endswith("Dict"):
                 if len(args) >= 2:
                     # Get schemas for key and value types
                     _, key_example = self._type_to_schema(args[0])
                     value_schema, value_example = self._type_to_schema(args[1])
-                    
+
                     # Create schema for dictionary
                     schema = {
                         "type": "object",
                         "additionalProperties": value_schema,
-                        "description": f"Dictionary with {args[0].__name__} keys and {value_schema.get('description', 'values')}"
+                        "description": f"Dictionary with {args[0].__name__} keys and {value_schema.get('description', 'values')}",
                     }
-                    
+
                     # Create example with the example key and value
                     example = {}
                     if key_example is not None and value_example is not None:
                         # Convert key to string (JSON keys must be strings)
                         str_key = str(key_example)
                         example[str_key] = value_example
-                    
+
                     return schema, example
-                
+
                 # Handle Dict with no type arguments
                 return basic_types[dict]
-        
+
         # Default fallback - return generic object schema
         logger.debug(f"Using fallback schema for type: {type_hint}")
         return {
             "type": "object",
-            "description": f"Object of type {getattr(type_hint, '__name__', str(type_hint))}"
+            "description": f"Object of type {getattr(type_hint, '__name__', str(type_hint))}",
         }, {}
+
 
 # Singleton registry
 tool_registry = ToolRegistry()
